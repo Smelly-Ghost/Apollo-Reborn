@@ -130,6 +130,7 @@ BOOL sPiPSkipButtons = NO;
 NSInteger sPiPSkipSeconds = 10;
 BOOL sPiPProgressBar = NO;
 
+NSInteger sNSFWBlurOverride = 0;
 BOOL sTagFilterEnabled = NO;
 NSString *sTagFilterMode = @"blur";
 BOOL sTagFilterNSFW = YES;

@@ -390,6 +390,10 @@ typedef NS_ENUM(NSInteger, CommentLinkHost) {
     CommentLinkHostImgChest = 2,
 };
 extern NSInteger sCommentLinkHost;
+// Auto mode (UDKeyCommentLinkPreferNative): comment images go to Reddit's native
+// upload where the subreddit allows image comments; the link host is only the
+// fallback. Consulted at photo-button arming time in ApolloMarkdownToolbarGif.xm.
+extern BOOL sCommentLinkPreferNative;
 
 // Most recently observed Reddit bearer token, captured from outgoing Authorization
 // headers. Used by the native Reddit image upload path. nil if Apollo hasn't made an

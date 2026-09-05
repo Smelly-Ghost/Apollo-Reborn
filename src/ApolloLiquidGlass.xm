@@ -911,6 +911,9 @@ static BOOL ApolloRecenterTitleControl(UIView *titleControl);
 // Set by ApolloNavigationTitleGlassRefreshNavigationBar: the next capsule install fades in
 // instead of appearing, because it lands right as an interactive transition settles.
 @property (nonatomic) BOOL fadeNextInstall;
+@property (nonatomic) BOOL loggedEmptyContent;   // one diagnostic per controller for the no-content case
+@property (nonatomic) NSUInteger missingContentRetries;  // bounded re-checks while a title has no content yet
+@property (nonatomic) NSUInteger observedTitleTreeFingerprint;
 @property (nonatomic) CGRect observedTitleFrame;
 @property (nonatomic) CGRect observedTitleBounds;
 @property (nonatomic) NSUInteger observedTitleSubviewCount;
@@ -1037,6 +1040,7 @@ static BOOL ApolloRecenterTitleControl(UIView *titleControl);
     // treatment and Blur's diffusion leave the title needing its own backing.
     // Resolved style, not raw mode: Automatic must track what the OS renders.
     if (ApolloResolvedScrollEdgeEffectStyle() == ApolloScrollEdgeEffectStyleHard) {
+        if (self.glassView) ApolloLog(@"[NavigationTitleGlass] removed capsule (hard edge style)");
         [self.glassView removeFromSuperview];
         self.glassView = nil;
         self.glassHostView = nil;
@@ -1045,11 +1049,32 @@ static BOOL ApolloRecenterTitleControl(UIView *titleControl);
 
     CGRect targetFrame = [self glassFrameForHostView:hostView candidateViews:candidateViews];
     if (CGRectIsNull(targetFrame) || CGRectIsEmpty(targetFrame)) {
+        if (self.glassView || !self.loggedEmptyContent) {
+            self.loggedEmptyContent = YES;
+            NSMutableArray<NSString *> *desc = [NSMutableArray array];
+            for (UIView *v in candidateViews) {
+                [desc addObject:[NSString stringWithFormat:@"%@%@ a=%.2f h=%d", NSStringFromClass(v.class),
+                                 NSStringFromCGRect(v.bounds), v.alpha, (int)v.hidden]];
+            }
+            ApolloLog(@"[NavigationTitleGlass] %@ capsule: no visible title content (host %@, %lu candidates: %@; title subviews %@)",
+                      self.glassView ? @"removed" : @"no", NSStringFromClass(hostView.class),
+                      (unsigned long)candidateViews.count, [desc componentsJoinedByString:@" | "],
+                      [[self.titleControl.subviews valueForKey:@"class"] componentsJoinedByString:@","]);
+        }
         [self.glassView removeFromSuperview];
         self.glassView = nil;
         self.glassHostView = nil;
+        // A plain title with nothing to measure is usually a title that is not
+        // built yet: Apollo's DualLabelTitleButton ("480 Comments / 2 New")
+        // creates its label lazily, after the title control's own layout pass
+        // has already run, and nothing lays the title control out again on its
+        // account — so without a re-check the capsule is skipped (fresh push) or
+        // dropped (a refresh that turns the title two-line) for good. Look again
+        // a few times; JumpBar titles measure their own ivars and are left alone.
+        if (hostView == self.titleControl) [self scheduleRetryAfterMissingContent];
         return;
     }
+    self.missingContentRetries = 0;
 
     if (self.glassHostView != hostView) {
         [self.glassView removeFromSuperview];
@@ -1061,7 +1086,10 @@ static BOOL ApolloRecenterTitleControl(UIView *titleControl);
         // at partial alpha and not yet at its settled position. A capsule installed now reads
         // as a translucent bubble floating beside the current title (cancelled swipe on the
         // feed). Skip it; the transition's completion refreshes the bar and installs it then.
-        if (ApolloNavTransitionInFlight()) return;
+        if (ApolloNavTransitionInFlight()) {
+            ApolloLog(@"[NavigationTitleGlass] capsule install deferred (navigation transition in flight)");
+            return;
+        }
         self.glassView = [self newRegularGlassView];
         if (!self.glassView) return;
         self.glassView.frame = targetFrame;
@@ -1111,6 +1139,21 @@ static void ApolloFoldBarContentFingerprint(UIView *view, NSUInteger depth,
         *hash = (*hash * 1099511628211ULL) ^ h;
         ApolloFoldBarContentFingerprint(child, depth + 1, count, hash);
     }
+}
+
+// The title control's own subtree (frames + visibility). The bar-wide fold
+// below stops at depth 8, and on iOS 26 a hosted two-line title — Apollo's
+// DualLabelTitleButton ("479 Comments / 1 New") inside UIKit's hosted-view
+// wrapper — keeps its label at depth 9: the label is created lazily after the
+// title swap, so a capsule skipped or removed while it was still missing never
+// came back (nothing the bar fold could see ever changed). Folding from the
+// title control itself puts that label well inside the cap.
+static NSUInteger ApolloTitleControlTreeFingerprint(UIView *titleControl) {
+    if (!titleControl) return 0;
+    NSUInteger hash = 1469598103934665603ULL;
+    NSUInteger count = 0;
+    ApolloFoldBarContentFingerprint(titleControl, 0, &count, &hash);
+    return hash ^ (count << 1);
 }
 
 static NSUInteger ApolloNavigationBarContentFingerprint(UIView *titleControl) {
@@ -1181,9 +1224,24 @@ static NSUInteger ApolloJumpBarContentMetric(UIView *jumpBar) {
     self.observedJumpBarSubviewCount = jumpBar.subviews.count;
     self.observedSearching = ApolloJumpBarIsSearching(jumpBar);
     self.observedBarFingerprint = ApolloNavigationBarContentFingerprint(self.titleControl);
+    self.observedTitleTreeFingerprint = ApolloTitleControlTreeFingerprint(self.titleControl);
     self.observedContentMetric = ApolloJumpBarContentMetric(jumpBar);
     // A bailed recenter leaves the gate open so the next layout pass retries.
     self.observationValid = recenterSettled;
+}
+
+- (void)scheduleRetryAfterMissingContent {
+    static const NSTimeInterval kRetryDelays[] = {0.05, 0.15, 0.4, 1.0};
+    NSUInteger attempt = self.missingContentRetries;
+    if (attempt >= sizeof(kRetryDelays) / sizeof(kRetryDelays[0])) return;
+    self.missingContentRetries = attempt + 1;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRetryDelays[attempt] * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        ApolloNavigationTitleGlassController *strongSelf = weakSelf;
+        if (!strongSelf || !strongSelf.titleControl.window) return;
+        [strongSelf scheduleTargetRefresh];
+    });
 }
 
 - (void)scheduleTargetRefresh {
@@ -1211,6 +1269,7 @@ static NSUInteger ApolloJumpBarContentMetric(UIView *jumpBar) {
         self.observedJumpBarSubviewCount == jumpBar.subviews.count &&
         self.observedSearching == ApolloJumpBarIsSearching(jumpBar) &&
         self.observedBarFingerprint == ApolloNavigationBarContentFingerprint(titleControl) &&
+        self.observedTitleTreeFingerprint == ApolloTitleControlTreeFingerprint(titleControl) &&
         self.observedContentMetric == ApolloJumpBarContentMetric(jumpBar);
     if (!unchanged) [self scheduleTargetRefresh];
 }
@@ -1383,11 +1442,23 @@ static BOOL ApolloRecenterTitleControl(UIView *titleControl) {
     // geometry they computed with the buttons up — gap midpoint and overlap
     // clamp alike — which is what keeps the title still in either
     // Balance-Title mode.
+    //
+    // The hold also covers a trailing side that is NOT empty but carries a
+    // stand-in the hold was set for: the comments find navigator
+    // (ApolloFindInCommentsGlass.xm) swaps Apollo's sort/more/globe group for
+    // its count + chevrons for the length of a search, and re-balancing the
+    // title against that narrower group made "43 Comments" slide sideways the
+    // moment the field was tapped. Held, the recorded edge stands in for the
+    // live one and the stand-in never overwrites the recording — the live
+    // edge is kept aside for the overlap check after the centering.
     UINavigationItem *navItem = topVC.navigationItem;
+    CGFloat liveRightLimit = rightLimit;
+    BOOL liveFoundRight = foundRight;
     if (navItem) {
-        if (foundRight) {
+        BOOL hold = ApolloNavItemTrailingReservationHold(navItem);
+        if (foundRight && !hold) {
             ApolloNavItemNoteTrailingContentInset(navItem, CGRectGetWidth(bar.bounds) - rightLimit);
-        } else if (ApolloNavItemTrailingReservationHold(navItem)) {
+        } else if (hold) {
             CGFloat reservedInset = ApolloNavItemTrailingContentInset(navItem);
             if (reservedInset > 0) {
                 rightLimit = CGRectGetWidth(bar.bounds) - reservedInset;
@@ -1451,18 +1522,19 @@ static BOOL ApolloRecenterTitleControl(UIView *titleControl) {
     }
 
     CGFloat halfWidth = width / 2.0;
-    CGFloat targetCenter;
-    if (sLGTitleGapCentering && foundLeft && foundRight) {
-        // Content on BOTH sides: park the title at the midpoint of the visual
-        // gap between them. Equal margins by construction — no overlap possible
-        // — and the position no longer depends on which of UIKit's three layout
-        // arms fired or how wide the trailing pill is. This is the case (e.g. a
-        // single back button facing a 3-icon moderator capsule) where a wider
-        // trailing cluster pulls the visual balance point away from true center.
-        targetCenter = (rightLimit - leftLimit >= width + 4.0)
-            ? (leftLimit + rightLimit) / 2.0
-            : unadjustedCenter;  // gap narrower than the title — leave UIKit's layout alone
-    } else {
+    CGFloat barCenter = CGRectGetMidX(bar.bounds);
+    CGFloat (^centerAgainst)(CGFloat, BOOL) = ^CGFloat(CGFloat rightEdge, BOOL haveRight) {
+        if (sLGTitleGapCentering && foundLeft && haveRight) {
+            // Content on BOTH sides: park the title at the midpoint of the visual
+            // gap between them. Equal margins by construction — no overlap possible
+            // — and the position no longer depends on which of UIKit's three layout
+            // arms fired or how wide the trailing pill is. This is the case (e.g. a
+            // single back button facing a 3-icon moderator capsule) where a wider
+            // trailing cluster pulls the visual balance point away from true center.
+            return (rightEdge - leftLimit >= width + 4.0)
+                ? (leftLimit + rightEdge) / 2.0
+                : unadjustedCenter;  // gap narrower than the title — leave UIKit's layout alone
+        }
         // Screen centering (the toggle's OFF mode, and always the rule when
         // content sits on at most one side, e.g. root screens): prefer the
         // bar's absolute midpoint, nudged just enough off a pill it would
@@ -1471,12 +1543,21 @@ static BOOL ApolloRecenterTitleControl(UIView *titleControl) {
         // doesn't need to be "balanced against". The nudge is what keeps long
         // titles from sliding under the trailing pill (#178) without needing
         // the old bulk-translation bail.
-        CGFloat barCenter = CGRectGetMidX(bar.bounds);
         CGFloat minCenter = leftLimit + halfWidth + kEdgePadding;
-        CGFloat maxCenter = rightLimit - halfWidth - kEdgePadding;
-        targetCenter = (minCenter > maxCenter)
+        CGFloat maxCenter = rightEdge - halfWidth - kEdgePadding;
+        return (minCenter > maxCenter)
             ? unadjustedCenter   // bar too cramped — leave UIKit's layout alone
             : MIN(MAX(barCenter, minCenter), maxCenter);
+    };
+    CGFloat targetCenter = centerAgainst(rightLimit, foundRight);
+    // A held trailing edge is a promise not to move the title, not a licence to
+    // run it under whatever really sits there: when the live trailing content
+    // reaches further in than the recorded edge and the parked title would touch
+    // it, centre against the live edge after all (a long title facing a wide
+    // match count) — a shift beats an overlap.
+    if (liveFoundRight && liveRightLimit < rightLimit - 0.5 &&
+        targetCenter + halfWidth + kEdgePadding > liveRightLimit) {
+        targetCenter = centerAgainst(liveRightLimit, YES);
     }
 
     CGFloat newTx = targetCenter - unadjustedCenter;
@@ -1499,6 +1580,7 @@ static BOOL ApolloRecenterTitleControl(UIView *titleControl) {
     if (!self.window) {
         ApolloNavigationTitleGlassController *controller =
             objc_getAssociatedObject(self, &kApolloNavigationTitleGlassControllerKey);
+        if (controller.glassView) ApolloLog(@"[NavigationTitleGlass] title control left the window; capsule dropped");
         [controller invalidate];
         objc_setAssociatedObject(self, &kApolloNavigationTitleGlassControllerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;

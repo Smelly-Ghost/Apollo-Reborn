@@ -969,6 +969,11 @@ static NSArray<UIMenuElement *> *ApolloNativeActionMenuBuildModeratorReportSecti
 static UIMenu *ApolloNativeActionMenuBuildMenu(id actionController, BOOL moderatorStyle) {
     objc_setAssociatedObject(actionController, &kApolloNativeActionMenuModeratorSelectionKey,
         @(moderatorStyle), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // A customised ••• layout (Settings → Interface → Action Menus) permutes
+    // the controller's native actions in place; it must land before the
+    // buffer is walked below. Memoised per controller, no-op otherwise.
+    ApolloActionMenuPrepareController(actionController, nil);
+
     void *actionsBuffer = ApolloReadRawIvar(actionController, "actions");
     void *textActionsBuffer = ApolloReadRawIvar(actionController, "textActions");
     int64_t actionCount = ApolloSwiftArrayCount(actionsBuffer);
@@ -1012,6 +1017,7 @@ static UIMenu *ApolloNativeActionMenuBuildMenu(id actionController, BOOL moderat
                 });
                 if (postTypes) element = postTypes;
             }
+            ApolloActionMenuTagElementWithNativeKind(element, actionKind);
             [children addObject:element];
         }
     }
@@ -1548,6 +1554,9 @@ static UIViewController *ApolloNativeActionMenuTopMostPresenter(UIViewController
 }
 
 static BOOL ApolloNativeActionMenuPresent(id presenter, id actionController, void (^completion)(void)) {
+    // Capture even on the legacy path: UIKit may defer its table/geometry
+    // callbacks until after the originating tap has returned.
+    ApolloActionMenuCaptureContextForController(actionController);
     if (!ApolloNativeActionMenusEnabled()) return NO;
     if (![actionController isKindOfClass:objc_getClass("_TtC6Apollo16ActionController")]) return NO;
     if (ApolloReadBoolIvar(actionController, "showKeyboardOnAppearanceForTextEntryView", NO)) return NO;

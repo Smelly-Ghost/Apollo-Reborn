@@ -53,14 +53,9 @@ static void ApolloUserFlairInitializeSharedState(void) {
     sApolloUserFlairCapturedOptionsLock = [NSObject new];
     sApolloUserFlairSpriteCacheLock = [NSObject new];
     sApolloUserFlairSheetCache = [NSCache new];
-    // Sheets must stay resident while the flair selector crops rows out of
-    // them lazily, and one sheet can be arbitrarily large, so this is bounded
-    // by count and emptied on a memory warning rather than by bytes.
     sApolloUserFlairSheetCache.countLimit = 6;
     ApolloMemoryRegisterPurgableCache(@"flair-sprite-sheets", sApolloUserFlairSheetCache);
-    sApolloUserFlairSpriteFileCache = [NSMutableDictionary new];
     sApolloUserFlairSpriteImageByPath = [NSMapTable strongToWeakObjectsMapTable];
-    sApolloUserFlairSpriteCacheOrder = [NSMutableArray new];
 }
 
 // The flair selector's flair options live in section 1 of its table.

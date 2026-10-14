@@ -3670,6 +3670,8 @@ static void ApolloShowRedditRateLimitToast(NSTimeInterval seconds) {
                                     UDKeyAutomaticBackupDestination: @0,
                                     UDKeyCrashCaptureEnabled: @YES,
                                     UDKeyTrendingSubredditsLimit: @"5",
+                                    UDKeyRecentlyVisitedSubredditsLimit: @"5",
+                                    UDKeySearchTabSectionOrder: @[@"trending", @"random", @"recent"],
                                     UDKeyShowRandNsfw: @NO,
                                     UDKeyRandomSubredditsSource: defaultRandomSubredditsSource,
                                     UDKeyRandNsfwSubredditsSource: @"",
@@ -3767,6 +3769,7 @@ static void ApolloShowRedditRateLimitToast(NSTimeInterval seconds) {
                                     UDKeyScrollReturnButton: @YES,
                                     UDKeyCenterTitleBetweenButtons: @NO,
                                     UDKeyInfoRowTapTranslation: @YES,
+                                    UDKeyThreeStateVoting: @NO,
                                     UDKeyLiveCommentsFollow: @YES,
                                     UDKeyPerPostCommentSort: @NO,
                                     UDKeyEnableBulkTranslation: @NO,
@@ -4080,6 +4083,7 @@ static void ApolloShowRedditRateLimitToast(NSTimeInterval seconds) {
     // it (ApolloInfoTapFired / SRTActivateTarget check it first).
     if (sInfoRowPopupMode && sInfoRowOverlayMode) sInfoRowPopupMode = NO;
     sInfoRowTapTranslation = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyInfoRowTapTranslation];
+    sThreeStateVoting = [standardDefaults boolForKey:UDKeyThreeStateVoting];
     sLiveCommentsFollow = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyLiveCommentsFollow];
     sPerPostCommentSort = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyPerPostCommentSort];
     // Both sort memories on = stale state from an older build or a restored backup;
@@ -4358,6 +4362,7 @@ static void ApolloShowRedditRateLimitToast(NSTimeInterval seconds) {
     sRandNsfwSubredditsSource = (NSString *)[[NSUserDefaults standardUserDefaults] objectForKey:UDKeyRandNsfwSubredditsSource];
     sTrendingSubredditsSource = (NSString *)[[NSUserDefaults standardUserDefaults] objectForKey:UDKeyTrendingSubredditsSource];
     sTrendingSubredditsLimit = (NSString *)[[NSUserDefaults standardUserDefaults] objectForKey:UDKeyTrendingSubredditsLimit];
+    sRecentlyVisitedSubredditsLimit = [[NSUserDefaults standardUserDefaults] stringForKey:UDKeyRecentlyVisitedSubredditsLimit] ?: @"5";
 
     // Launch hooks are cache-only and fail open until this off-main seed lands.
     // The seed also queues refreshes after loading the last-known-good values.

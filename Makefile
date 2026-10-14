@@ -159,11 +159,13 @@ ApolloReborn_FILES = \
     $(SRC_DIR)/ApolloMediaAutoplay.m \
     $(SRC_DIR)/ApolloCommentsCollapse.xm \
     $(SRC_DIR)/ApolloCommentHeaderLayout.xm \
+    $(SRC_DIR)/ApolloMaintainerTint.m \
     $(SRC_DIR)/ApolloInboxCommentScroll.xm \
     $(SRC_DIR)/ApolloFindInComments.xm \
     $(SRC_DIR)/ApolloFindInCommentsGlass.xm \
     $(SRC_DIR)/ApolloStatsRowTouch.xm \
     $(SRC_DIR)/ApolloCommentVoteFlicker.xm \
+    $(SRC_DIR)/ApolloThreeStateVoting.xm \
     $(SRC_DIR)/ApolloFeedSubredditIcons.xm \
     $(SRC_DIR)/ApolloPostedCommentInsert.xm \
     $(SRC_DIR)/ApolloLoadMoreComments.xm \
@@ -289,6 +291,10 @@ ApolloReborn_FILES = \
     $(SRC_DIR)/ApolloSubredditSwitcherSheet.xm \
     $(SRC_DIR)/ApolloSearchHeaderOverlapFix.xm \
     $(SRC_DIR)/ApolloSearchTabFixes.xm \
+    $(SRC_DIR)/ApolloSearchLandingViewController.m \
+    $(SRC_DIR)/ApolloSearchRecents.m \
+    $(SRC_DIR)/ApolloSearchLandingPreferences.m \
+    $(SRC_DIR)/ApolloSearchVisitRecording.xm \
     $(SRC_DIR)/ApolloGoogleSearch.m \
     $(SRC_DIR)/ApolloGoogleSearchViewController.m \
     $(SRC_DIR)/ApolloGoogleSearchTab.m \

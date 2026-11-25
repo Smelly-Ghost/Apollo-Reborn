@@ -4396,6 +4396,7 @@ static void ApolloShowRedditRateLimitToast(NSTimeInterval seconds) {
                                     UDKeyImgurAlbumFallbackProxies: @YES,
                                     UDKeyAutomaticUpdateChecks: @YES,
                                     UDKeyWebJSONEnabled: @NO,
+                                    UDKeyWebJSONGraphQLEnabled: @YES,
                                     UDKeyReduceRateLimiting: @NO,
                                     UDKeyReduceRateLimitingPauseAt: @70,
                                     UDKeyRateLimitWarnings: @NO,
@@ -4818,6 +4819,7 @@ static void ApolloShowRedditRateLimitToast(NSTimeInterval seconds) {
     // installed below — in the simulator the keychain is virtualized by those
     // hooks, so reading before they're in place returns nothing.
     sWebJSONEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyWebJSONEnabled];
+    sWebJSONGraphQLEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyWebJSONGraphQLEnabled];
     sReduceRateLimiting = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyReduceRateLimiting];
     sReduceRateLimitingPauseAt = ApolloReduceRateLimitingClampPauseAt(
         [[NSUserDefaults standardUserDefaults] integerForKey:UDKeyReduceRateLimitingPauseAt]);

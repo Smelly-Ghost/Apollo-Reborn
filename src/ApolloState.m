@@ -190,6 +190,7 @@ NSArray<NSString *> *sTranslationSkipLanguages = nil;
 BOOL sAppleTranslateSheet = NO;
 
 BOOL sWebJSONEnabled = NO;
+BOOL sWebJSONGraphQLEnabled = YES;
 BOOL sReduceRateLimiting = NO;
 NSInteger sReduceRateLimitingPauseAt = 70;
 BOOL sRateLimitWarnings = NO;

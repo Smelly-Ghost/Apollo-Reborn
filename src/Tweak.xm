@@ -57,6 +57,7 @@
 #import "ApolloFavoritesSorting.h"
 #import "ApolloSubredditInfoCache.h"
 #import "ApolloAICloudBridge.h"
+#import "ApolloRateLimitMeter.h"
 #import "crash/ApolloCrashManager.h"
 #import "crash/ApolloCrashContext.h"
 #import "crash/ApolloCrashPromptCoordinator.h"
@@ -4396,6 +4397,9 @@ static void ApolloShowRedditRateLimitToast(NSTimeInterval seconds) {
                                     UDKeyAutomaticUpdateChecks: @YES,
                                     UDKeyWebJSONEnabled: @NO,
                                     UDKeyReduceRateLimiting: @NO,
+                                    UDKeyReduceRateLimitingPauseAt: @70,
+                                    UDKeyRateLimitWarnings: @NO,
+                                    UDKeyRateLimitMeter: @NO,
                                     UDKeyKeylessRouteUpdates: @YES,
                                     UDKeyReduceRateLimitingOffered: @NO,
                                     UDKeyAllPlusNSFWEnabled: @NO,
@@ -4815,6 +4819,13 @@ static void ApolloShowRedditRateLimitToast(NSTimeInterval seconds) {
     // hooks, so reading before they're in place returns nothing.
     sWebJSONEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyWebJSONEnabled];
     sReduceRateLimiting = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyReduceRateLimiting];
+    sReduceRateLimitingPauseAt = ApolloReduceRateLimitingClampPauseAt(
+        [[NSUserDefaults standardUserDefaults] integerForKey:UDKeyReduceRateLimitingPauseAt]);
+    sRateLimitWarnings = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyRateLimitWarnings];
+    sRateLimitMeter = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyRateLimitMeter];
+    // The budget notices and the floating gauge follow the count Reddit's
+    // answers report (ApolloRateLimitMeter.h). Both are off unless switched on.
+    ApolloRateLimitMeterInstall();
     sKeylessRouteUpdates = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyKeylessRouteUpdates];
     sPollsFeatureEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:UDKeyPollsEnabled];
     sPollOptionAlignment = [[NSUserDefaults standardUserDefaults] integerForKey:UDKeyPollOptionAlignment];
